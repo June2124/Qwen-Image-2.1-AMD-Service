@@ -1,0 +1,32 @@
+FROM boogu-image:amd-auto-size-20261009
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    COMFY_ROOT=/opt/ComfyUI \
+    QWEN_DATA_ROOT=/data
+
+WORKDIR /opt/qwen-service
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl patch \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements-comfy.txt /tmp/requirements-comfy.txt
+RUN python -m pip install --no-cache-dir -r /tmp/requirements-comfy.txt
+
+COPY vendor/ComfyUI /opt/ComfyUI
+COPY patches/comfyui-pr-16603-qwen-vl-linear.patch /tmp/qwen-vl-linear.patch
+RUN cd /opt/ComfyUI \
+    && patch -p1 --forward < /tmp/qwen-vl-linear.patch \
+    && test -f main.py \
+    && mkdir -p /opt/comfy-empty-web /data/input /data/output /data/user
+
+COPY comfy_workflow.py comfy_manager.py qwen_service.py ./
+
+EXPOSE 8801
+HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
+    CMD curl --fail --silent http://127.0.0.1:8801/health >/dev/null || exit 1
+
+ENTRYPOINT []
+CMD ["python", "-m", "uvicorn", "qwen_service:app", "--host", "0.0.0.0", "--port", "8801", "--workers", "1"]
