@@ -1,4 +1,4 @@
-"""Build pinned ComfyUI API workflows for Qwen-Image-2.1."""
+"""Build pinned ComfyUI API workflows for Qwen-Image-2.1-Turbo."""
 
 from __future__ import annotations
 
@@ -7,10 +7,24 @@ import re
 from typing import Dict, Iterable, Tuple
 
 
-MODEL_NAME = "qwen-image-2.1"
-DIFFUSION_MODEL = "qwen_image_2.1_bf16.safetensors"
+MODEL_NAME = "qwen-image-2.1-turbo"
+DIFFUSION_MODEL = "qwen_image_2.1_turbo_bf16.safetensors"
 TEXT_ENCODER = "qwen3vl_8b_int8_convrot.safetensors"
 VAE_MODEL = "qwen_image_2.1_vae_bf16.safetensors"
+TURBO_STEPS = 8
+TURBO_GUIDANCE_SCALE = 1.0
+TURBO_SIGMAS = (
+    1.0,
+    0.978453,
+    0.95418,
+    0.926626,
+    0.89508,
+    0.845148,
+    0.704534,
+    0.414568,
+    0.0,
+)
+TURBO_SIGMAS_TEXT = ", ".join(str(value) for value in TURBO_SIGMAS)
 IMAGE_SIZE_MULTIPLE = 32
 MAX_CANVAS_SIDE = 4096
 
@@ -83,7 +97,7 @@ def build_workflow(
     guidance_scale: float,
     seed: int,
     image_names: Iterable[str] = (),
-    filename_prefix: str = "qwen-image-2.1",
+    filename_prefix: str = "qwen-image-2.1-turbo",
     diffusion_model: str = DIFFUSION_MODEL,
     text_encoder: str = TEXT_ENCODER,
     vae_model: str = VAE_MODEL,
@@ -102,6 +116,18 @@ def build_workflow(
         raise WorkflowValidationError("at most 10 input images are supported")
     if not str(prompt or "").strip():
         raise WorkflowValidationError("prompt cannot be empty")
+    if steps != TURBO_STEPS:
+        raise WorkflowValidationError(
+            "Qwen-Image-2.1-Turbo requires exactly {} sampling steps".format(
+                TURBO_STEPS
+            )
+        )
+    if float(guidance_scale) != TURBO_GUIDANCE_SCALE:
+        raise WorkflowValidationError(
+            "Qwen-Image-2.1-Turbo requires guidance scale {}".format(
+                TURBO_GUIDANCE_SCALE
+            )
+        )
 
     width, height = parse_size(size)
     encode_inputs = {
@@ -148,27 +174,43 @@ def build_workflow(
             "inputs": {"width": width, "height": height, "batch_size": 1},
         },
         "7": {
-            "class_type": "KSampler",
-            "inputs": {
-                "model": ["2", 0],
-                "seed": seed,
-                "steps": steps,
-                "cfg": guidance_scale,
-                "sampler_name": "euler",
-                "scheduler": "simple",
-                "positive": ["5", 0],
-                "negative": ["5", 1],
-                "latent_image": ["5", 2] if mode == "image-to-image" else ["6", 0],
-                "denoise": 1.0,
-            },
+            "class_type": "RandomNoise",
+            "inputs": {"noise_seed": seed},
         },
         "8": {
-            "class_type": "VAEDecode",
-            "inputs": {"samples": ["7", 0], "vae": ["4", 0]},
+            "class_type": "CFGGuider",
+            "inputs": {
+                "model": ["2", 0],
+                "cfg": guidance_scale,
+                "positive": ["5", 0],
+                "negative": ["5", 1],
+            },
         },
         "9": {
+            "class_type": "KSamplerSelect",
+            "inputs": {"sampler_name": "euler"},
+        },
+        "10": {
+            "class_type": "ManualSigmas",
+            "inputs": {"sigmas": TURBO_SIGMAS_TEXT},
+        },
+        "11": {
+            "class_type": "SamplerCustomAdvanced",
+            "inputs": {
+                "noise": ["7", 0],
+                "guider": ["8", 0],
+                "sampler": ["9", 0],
+                "sigmas": ["10", 0],
+                "latent_image": ["5", 2] if mode == "image-to-image" else ["6", 0],
+            },
+        },
+        "12": {
+            "class_type": "VAEDecode",
+            "inputs": {"samples": ["11", 1], "vae": ["4", 0]},
+        },
+        "13": {
             "class_type": "SaveImage",
-            "inputs": {"images": ["8", 0], "filename_prefix": filename_prefix},
+            "inputs": {"images": ["12", 0], "filename_prefix": filename_prefix},
         },
     }
 
@@ -187,6 +229,10 @@ __all__ = [
     "DIFFUSION_MODEL",
     "TEXT_ENCODER",
     "VAE_MODEL",
+    "TURBO_STEPS",
+    "TURBO_GUIDANCE_SCALE",
+    "TURBO_SIGMAS",
+    "TURBO_SIGMAS_TEXT",
     "IMAGE_SIZE_MULTIPLE",
     "MAX_CANVAS_SIDE",
     "SIZE_PRESETS",

@@ -23,8 +23,8 @@ download() {
 }
 
 download \
-  'https://modelscope.cn/models/Comfy-Org/Qwen-Image-2.1/resolve/master/diffusion_models/qwen_image_2.1_bf16.safetensors' \
-  "${MODEL_ROOT}/diffusion_models/qwen_image_2.1_bf16.safetensors" 14230280616
+  'https://modelscope.cn/models/Comfy-Org/Qwen-Image-2.1/resolve/master/diffusion_models/qwen_image_2.1_turbo_bf16.safetensors' \
+  "${MODEL_ROOT}/diffusion_models/qwen_image_2.1_turbo_bf16.safetensors" 14230280616
 download \
   'https://modelscope.cn/models/Comfy-Org/Qwen-Image-2.1/resolve/master/text_encoders/qwen3vl_8b_int8_convrot.safetensors' \
   "${MODEL_ROOT}/text_encoders/qwen3vl_8b_int8_convrot.safetensors" 9350798360

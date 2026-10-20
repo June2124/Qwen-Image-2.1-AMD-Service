@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-IMAGE="${QWEN_IMAGE:-qwen-image-2.1:amd-20261010-multiref-fix}"
+IMAGE="${QWEN_IMAGE:-qwen-image-2.1:amd-turbo-20261019}"
 CONTAINER="${QWEN_CONTAINER:-qwen-image-2.1-amd}"
 MODEL_ROOT="${MODEL_ROOT:-/home/jetlinks/models/Qwen-Image-2.1-ComfyUI}"
 RUNTIME_ROOT="${RUNTIME_ROOT:-${ROOT}/runtime}"
@@ -10,7 +10,7 @@ PORT="${QWEN_PORT:-18036}"
 API_KEY="${QWEN_API_KEY:?set QWEN_API_KEY}"
 
 required=(
-  "${MODEL_ROOT}/diffusion_models/qwen_image_2.1_bf16.safetensors"
+  "${MODEL_ROOT}/diffusion_models/qwen_image_2.1_turbo_bf16.safetensors"
   "${MODEL_ROOT}/text_encoders/qwen3vl_8b_int8_convrot.safetensors"
   "${MODEL_ROOT}/vae/qwen_image_2.1_vae_bf16.safetensors"
 )

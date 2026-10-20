@@ -2,6 +2,9 @@ import unittest
 
 from comfy_workflow import (
     SIZE_PRESETS,
+    TURBO_GUIDANCE_SCALE,
+    TURBO_SIGMAS_TEXT,
+    TURBO_STEPS,
     WorkflowValidationError,
     build_workflow,
     canvas_workflow_size,
@@ -17,16 +20,20 @@ class WorkflowTests(unittest.TestCase):
             prompt="a quiet room",
             negative_prompt="",
             size="640x640",
-            steps=25,
-            guidance_scale=1.0,
+            steps=TURBO_STEPS,
+            guidance_scale=TURBO_GUIDANCE_SCALE,
             seed=7,
         )
         self.assertFalse(
             any(node["class_type"] == "LoadImage" for node in workflow.values())
         )
         self.assertEqual(workflow["6"]["inputs"]["width"], 640)
-        self.assertEqual(workflow["7"]["inputs"]["sampler_name"], "euler")
-        self.assertEqual(workflow["7"]["inputs"]["latent_image"], ["6", 0])
+        self.assertEqual(workflow["7"]["class_type"], "RandomNoise")
+        self.assertEqual(workflow["7"]["inputs"]["noise_seed"], 7)
+        self.assertEqual(workflow["9"]["inputs"]["sampler_name"], "euler")
+        self.assertEqual(workflow["10"]["inputs"]["sigmas"], TURBO_SIGMAS_TEXT)
+        self.assertEqual(workflow["11"]["inputs"]["latent_image"], ["6", 0])
+        self.assertEqual(workflow["12"]["inputs"]["samples"], ["11", 1])
         self.assertEqual(workflow["2"]["inputs"]["dtype"], "default")
 
     def test_canvas_is_image_one_and_references_follow(self):
@@ -35,8 +42,8 @@ class WorkflowTests(unittest.TestCase):
             prompt="edit image 1 using image 2",
             negative_prompt="text, watermark",
             size="640x352",
-            steps=40,
-            guidance_scale=2.0,
+            steps=TURBO_STEPS,
+            guidance_scale=TURBO_GUIDANCE_SCALE,
             seed=11,
             image_names=["canvas.png", "reference.png"],
         )
@@ -47,7 +54,7 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(workflow["22"]["inputs"]["image"], "reference.png")
         self.assertEqual(workflow["6"]["inputs"]["height"], 352)
         self.assertEqual(inputs["resolution"], 0)
-        self.assertEqual(workflow["7"]["inputs"]["latent_image"], ["5", 2])
+        self.assertEqual(workflow["11"]["inputs"]["latent_image"], ["5", 2])
 
     def test_rejects_more_than_ten_images(self):
         with self.assertRaises(WorkflowValidationError):
@@ -56,8 +63,8 @@ class WorkflowTests(unittest.TestCase):
                 prompt="edit",
                 negative_prompt="",
                 size="640x640",
-                steps=25,
-                guidance_scale=1.0,
+                steps=TURBO_STEPS,
+                guidance_scale=TURBO_GUIDANCE_SCALE,
                 seed=1,
                 image_names=["{}.png".format(index) for index in range(11)],
             )
@@ -76,6 +83,28 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(parse_size("1920x1088"), (1920, 1088))
         with self.assertRaises(WorkflowValidationError):
             parse_size("1920x1072")
+
+    def test_rejects_non_turbo_sampling_parameters(self):
+        with self.assertRaises(WorkflowValidationError):
+            build_workflow(
+                mode="text-to-image",
+                prompt="edit",
+                negative_prompt="",
+                size="640x640",
+                steps=25,
+                guidance_scale=TURBO_GUIDANCE_SCALE,
+                seed=1,
+            )
+        with self.assertRaises(WorkflowValidationError):
+            build_workflow(
+                mode="text-to-image",
+                prompt="edit",
+                negative_prompt="",
+                size="640x640",
+                steps=TURBO_STEPS,
+                guidance_scale=2.0,
+                seed=1,
+            )
 
 
 if __name__ == "__main__":

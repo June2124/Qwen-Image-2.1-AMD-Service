@@ -1,8 +1,14 @@
-# Qwen-Image-2.1 AMD FastAPI Service
+# Qwen-Image-2.1-Turbo AMD FastAPI Service
 
-This service exposes the official ComfyUI split-weight Qwen-Image-2.1 workflow
-through a small authenticated FastAPI API. It is configured for an AMD Radeon
-AI PRO R9700 (`gfx1201`) and a single 32 GB GPU.
+This service exposes the official ComfyUI split-weight Qwen-Image-2.1-Turbo
+workflow through a small authenticated FastAPI API. It is configured for an
+AMD Radeon AI PRO R9700 (`gfx1201`) and a single 32 GB GPU.
+
+Turbo sampling is always fixed to the checkpoint's official schedule: eight
+Euler steps, CFG `1.0`, and manual sigmas
+`1, 0.978453, 0.95418, 0.926626, 0.89508, 0.845148, 0.704534, 0.414568, 0`.
+Caller-provided `steps`, `guidance_scale`, or `cfg` values are parsed for API
+compatibility but do not change the effective sampler settings.
 
 ## Input roles
 
@@ -48,7 +54,7 @@ AMD `slow_conv3d` path on `gfx1201`; model state-dict keys and math are kept.
 
 The deployment uses:
 
-- `diffusion_models/qwen_image_2.1_bf16.safetensors`
+- `diffusion_models/qwen_image_2.1_turbo_bf16.safetensors`
 - `text_encoders/qwen3vl_8b_int8_convrot.safetensors`
 - `vae/qwen_image_2.1_vae_bf16.safetensors`
 
@@ -118,17 +124,17 @@ Example edit request:
     "reference_images": ["data:image/png;base64,..."]
   },
   "parameters": {
-    "steps": 40,
-    "guidance_scale": 2.0,
+    "steps": 50,
+    "guidance_scale": 4.0,
     "seed": 1234
   }
 }
 ```
 
-Legacy `size`, `width`, and `height` request parameters are ignored. The sampler
-is fixed to Euler/simple, matching the official Qwen workflow. CFG `1.0` is the
-official path; negative prompts only influence the result when CFG is raised
-above `1.0`.
+Legacy `size`, `width`, and `height` request parameters are ignored. The example
+intentionally sends non-Turbo sampling values to demonstrate backward
+compatibility: the response reports both the requested values and the effective
+fixed `steps=8` and `guidance_scale=1.0` values.
 
 Run the workflow unit tests with:
 
@@ -138,7 +144,7 @@ python -m unittest discover -s tests -v
 
 ## License notice
 
-Qwen-Image-2.1 is distributed under the Qwen Research License. Its published
-terms restrict use to non-commercial research unless a separate license is
-obtained. ComfyUI and each bundled dependency keep their own licenses. Review
-all applicable terms before production or commercial use.
+Qwen-Image-2.1-Turbo is distributed under the Qwen Research License. Its
+published terms restrict use to non-commercial research unless a separate
+license is obtained. ComfyUI and each bundled dependency keep their own
+licenses. Review all applicable terms before production or commercial use.

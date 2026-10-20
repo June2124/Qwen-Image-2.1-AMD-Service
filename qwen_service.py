@@ -1,4 +1,4 @@
-"""FastAPI facade for the official ComfyUI Qwen-Image-2.1 workflow."""
+"""FastAPI facade for the official ComfyUI Qwen-Image-2.1-Turbo workflow."""
 
 from __future__ import annotations
 
@@ -25,6 +25,9 @@ from comfy_manager import (
 from comfy_workflow import (
     IMAGE_SIZE_MULTIPLE,
     MODEL_NAME,
+    TURBO_GUIDANCE_SCALE,
+    TURBO_SIGMAS,
+    TURBO_STEPS,
     WorkflowValidationError,
     canvas_workflow_size,
     parse_size,
@@ -39,8 +42,7 @@ logger = logging.getLogger("qwen-image-service")
 
 API_KEY = os.getenv("QWEN_API_KEY", "").strip()
 TEXT_TO_IMAGE_SIZE = "640x640"
-DEFAULT_STEPS = int(os.getenv("QWEN_DEFAULT_STEPS", "25"))
-DEFAULT_GUIDANCE_SCALE = float(os.getenv("QWEN_DEFAULT_GUIDANCE_SCALE", "1.0"))
+MODEL_ALIASES = {MODEL_NAME, "qwen-image-2.1"}
 MAX_IMAGE_BYTES = int(os.getenv("QWEN_MAX_IMAGE_BYTES", str(30 * 1024 * 1024)))
 MAX_TOTAL_IMAGE_BYTES = int(
     os.getenv("QWEN_MAX_TOTAL_IMAGE_BYTES", str(150 * 1024 * 1024))
@@ -176,7 +178,7 @@ def _payload(mode: str, payload: Dict[str, Any]) -> dict:
     if not isinstance(payload, dict):
         raise HTTPException(status_code=400, detail="request body must be a JSON object")
     model = str(payload.get("model") or MODEL_NAME).strip().lower()
-    if model != MODEL_NAME:
+    if model not in MODEL_ALIASES:
         raise HTTPException(status_code=400, detail="unsupported model")
     input_data = payload.get("input")
     parameters = payload.get("parameters") or {}
@@ -196,11 +198,15 @@ def _payload(mode: str, payload: Dict[str, Any]) -> dict:
     if len(negative_prompt) > 20000:
         raise HTTPException(status_code=400, detail="negative_prompt is too long")
 
-    steps = _integer(parameters.get("steps", DEFAULT_STEPS), "steps", 1, 60)
-    guidance_value = parameters.get(
-        "guidance_scale", parameters.get("cfg", DEFAULT_GUIDANCE_SCALE)
+    requested_steps = _integer(
+        parameters.get("steps", TURBO_STEPS), "steps", 1, 60
     )
-    guidance_scale = _number(guidance_value, "guidance_scale", 1.0, 10.0)
+    guidance_value = parameters.get(
+        "guidance_scale", parameters.get("cfg", TURBO_GUIDANCE_SCALE)
+    )
+    requested_guidance_scale = _number(
+        guidance_value, "guidance_scale", 1.0, 10.0
+    )
     seed_value = parameters.get("seed")
     seed = (
         secrets.randbelow(0x7FFFFFFFFFFFFFFF)
@@ -232,8 +238,13 @@ def _payload(mode: str, payload: Dict[str, Any]) -> dict:
         "workflow_size": "{}x{}".format(workflow_width, workflow_height),
         "width": width,
         "height": height,
-        "steps": steps,
-        "guidance_scale": guidance_scale,
+        # Turbo uses the checkpoint's fixed eight-step schedule. Keep parsing
+        # caller values for backward compatibility, but never feed them into
+        # the sampler.
+        "steps": TURBO_STEPS,
+        "guidance_scale": TURBO_GUIDANCE_SCALE,
+        "requested_steps": requested_steps,
+        "requested_guidance_scale": requested_guidance_scale,
         "seed": seed,
         "close_model": close_model,
         "images": images,
@@ -251,13 +262,17 @@ async def lifespan(_app: FastAPI):
         MANAGER.shutdown()
 
 
-app = FastAPI(title="Qwen-Image-2.1 AMD Service", version="1.1.0", lifespan=lifespan)
+app = FastAPI(
+    title="Qwen-Image-2.1-Turbo AMD Service",
+    version="1.2.0",
+    lifespan=lifespan,
+)
 
 
 @app.get("/")
 def root():
     return {
-        "service": "Qwen-Image-2.1 AMD Service",
+        "service": "Qwen-Image-2.1-Turbo AMD Service",
         "model": MODEL_NAME,
         "endpoints": [
             "/v1/qwen-image/text-to-image",
@@ -278,6 +293,9 @@ def health():
         "image_alignment": IMAGE_SIZE_MULTIPLE,
         "max_input_images": 10,
         "input_roles": {"canvas_image": 1, "reference_images": 9},
+        "sampling_steps": TURBO_STEPS,
+        "sampling_guidance_scale": TURBO_GUIDANCE_SCALE,
+        "sampling_sigmas": list(TURBO_SIGMAS),
         **status,
     }
 
@@ -319,6 +337,8 @@ def _generate(mode: str, payload: Dict[str, Any]) -> dict:
             "height": values["height"],
             "steps": values["steps"],
             "guidance_scale": values["guidance_scale"],
+            "requested_steps": values["requested_steps"],
+            "requested_guidance_scale": values["requested_guidance_scale"],
             "seed": values["seed"],
             "workflow_size": values["workflow_size"],
         },
